@@ -11,10 +11,13 @@ public:
     BridgeBuilder() {
         const int N_FEATS = 1000;
         detector = ORB(N_FEATS);
+
         matcher = DescriptorMatcher::create("BruteForce-Hamming");
+
         processMarkers();
     }
 
+    // vector<KeyPoint> computeHomography(const Mat frame);
     void computeHomography(Mat frame);
 
 protected:
@@ -54,58 +57,69 @@ void BridgeBuilder::processMarkers() {
     // waitKey(0);
 }
 
+// vector<KeyPoint> BridgeBuilder::computeHomography(const Mat frame) {
 void BridgeBuilder::computeHomography(Mat frame) {
 
-    // detect keypoints and descriptors in the current frame
     vector<KeyPoint> fKPts;
     Mat fDesc;
+
     detector(frame, noArray(), fKPts, fDesc);
 
-    // match descriptors from the current frame to the descriptors of the two markers
     vector< vector<DMatch> > matches1; // 2D array to store matches with marker 1
     vector< vector<DMatch> > matches2; // 2D array to store matches with marker 2
     matcher->knnMatch(mDesc1, fDesc, matches1, 2);
     matcher->knnMatch(mDesc2, fDesc, matches2, 2);
 
-    // use Lowe's nearest/2nd nearest neighbor to find best candidate match for keypoints
-    vector<KeyPoint> queryKPts1;
-    vector<KeyPoint> trainKPts1;
+    // vector<KeyPoint> matchedInM1;
+    // vector<KeyPoint> matchedToM1;
+
+    // vector<KeyPoint> matchedInM2;
+    // vector<KeyPoint> matchedToM2;
+
+    vector<Point2f> matchedInM1;
+    vector<int> indices;
+    vector<Point2f> matchedToM1;
+
+    // vector<Point2f> matchedInM2;
+    // vector<Point2f> matchedToM2;
+
     const float MATCH_THRESH = 0.8f;
     for(unsigned i = 0; i < matches1.size(); i++) {
         if(matches1[i][0].distance < MATCH_THRESH * matches1[i][1].distance) {
-            queryKPts1.push_back(mKPts1[matches1[i][0].queryIdx]);
-            trainKPts1.push_back(fKPts[matches1[i][0].trainIdx]);
+            indices.push_back(i);
+            matchedInM1.push_back(mKPts1[matches1[i][0].queryIdx].pt);
+            matchedToM1.push_back(fKPts[matches1[i][0].trainIdx].pt);
+            // matchedToM1.push_back(fKPts[matches1[i][0].trainIdx]);
         }
     }
 
-    // now that we have only the best candidates from matches,
-    // get pts from keypoints to use in findHomography
-    vector<Point2f> queryPts1;
-    vector<Point2f> trainPts1;
-    for (unsigned i = 0; i < queryKPts1.size(); i++) {
-        queryPts1.push_back(queryKPts1[i].pt);
-        trainPts1.push_back(trainKPts1[i].pt);
-    }
+    // drawKeypoints(frame, matchedToM1, frame, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    // return matchedToM1;
 
-    // now compute a homography between the marker and the frame
     Mat homography;
     vector<unsigned char> inlierMask;
     const int RANSAC_THRESH = 5;
-    if (queryPts1.size() >= 4 && trainPts1.size() == queryPts1.size()) {
-        homography = findHomography(Mat(queryPts1), Mat(trainPts1), RANSAC, RANSAC_THRESH, inlierMask);
+    if (matchedInM1.size() >= 4 && matchedInM1.size() == matchedToM1.size()) {
+        homography = findHomography(Mat(matchedInM1), Mat(matchedToM1), RANSAC, RANSAC_THRESH, inlierMask);
     }
 
-    // get inlier keypoints of this model
-    vector<KeyPoint> inliers1;
+    // store inliers
+    // vector<KeyPoint> inliersInM1;
+    vector<KeyPoint> inliersToM1;
+    // vector<DMatch> inlierMatches;
+    // for(unsigned i = 0; i < matchedInM1.size(); i++) {
     for(unsigned i = 0; i < inlierMask.size(); i++) {
+        // if(inlierMask.at<uchar>(i)) {
         if (inlierMask[i]) {
-            inliers1.push_back(trainKPts1[i]);
+            // int new_i = static_cast<int>(inliersInM1.size());
+            // inliersInM1.push_back(matchedInM1[i]);
+            // inliersToM1.push_back(matchedToM1[i]);
+            inliersToM1.push_back(fKPts[matches1[i][0].trainIdx]);
+            // inlierMatches.push_back(DMatch(new_i, new_i, 0));
         }
     }
-
-    drawKeypoints(frame, inliers1, frame, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
-    // printf("nInliers = %d\n", (int)inliers1.size());
-}
+    // drawKeypoints(frame, inliersToM1, frame, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+}  
 
 int main(int argc, char *argv[]) {
 
@@ -128,10 +142,16 @@ int main(int argc, char *argv[]) {
         if (frame.empty()) break;
 
         bb.computeHomography(frame);
+        // vector<KeyPoint> marker1 = bb.computeHomography(frame);
+        // printf("nInliers = %d\n", (int)marker1.size());
+        // drawKeypoints(frame, marker1, frame, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+        
         imshow("BridgeBuilder", frame);
 
         //wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop
-        if (waitKey(30) == 27) break;
+        if (waitKey(30) == 27) {
+            break;
+        }
     }
 
     return 0;
