@@ -70,11 +70,20 @@ void BridgeBuilder::computeHomography(Mat frame) {
     // use Lowe's nearest/2nd nearest neighbor to find best candidate match for keypoints
     vector<KeyPoint> queryKPts1;
     vector<KeyPoint> trainKPts1;
+    vector<KeyPoint> queryKPts2;
+    vector<KeyPoint> trainKPts2;
     const float MATCH_THRESH = 0.8f;
     for(unsigned i = 0; i < matches1.size(); i++) {
         if(matches1[i][0].distance < MATCH_THRESH * matches1[i][1].distance) {
             queryKPts1.push_back(mKPts1[matches1[i][0].queryIdx]);
             trainKPts1.push_back(fKPts[matches1[i][0].trainIdx]);
+        }
+        
+    }
+    for (unsigned  i = 0; i < matches2.size(); i++) {
+        if(matches2[i][0].distance < MATCH_THRESH * matches2[i][1].distance) {
+            queryKPts2.push_back(mKPts2[matches2[i][0].queryIdx]);
+            trainKPts2.push_back(fKPts[matches2[i][0].trainIdx]);
         }
     }
 
@@ -82,28 +91,47 @@ void BridgeBuilder::computeHomography(Mat frame) {
     // get pts from keypoints to use in findHomography
     vector<Point2f> queryPts1;
     vector<Point2f> trainPts1;
+    vector<Point2f> queryPts2;
+    vector<Point2f> trainPts2;
     for (unsigned i = 0; i < queryKPts1.size(); i++) {
         queryPts1.push_back(queryKPts1[i].pt);
         trainPts1.push_back(trainKPts1[i].pt);
+        
+    }
+    for (unsigned i = 0; i < queryKPts2.size(); i++) {
+        queryPts2.push_back(queryKPts2[i].pt);
+        trainPts2.push_back(trainKPts2[i].pt);
     }
 
-    // now compute a homography between the marker and the frame
-    Mat homography;
-    vector<unsigned char> inlierMask;
+    // refine keypoint matches using RANSAC
+    Mat homography1;
+    Mat homography2;
+    vector<unsigned char> inlierMask1;
+    vector<unsigned char> inlierMask2;
     const int RANSAC_THRESH = 5;
     if (queryPts1.size() >= 4 && trainPts1.size() == queryPts1.size()) {
-        homography = findHomography(Mat(queryPts1), Mat(trainPts1), RANSAC, RANSAC_THRESH, inlierMask);
+        homography1 = findHomography(Mat(queryPts1), Mat(trainPts1), RANSAC, RANSAC_THRESH, inlierMask1);
+    }
+    if (queryPts2.size() >= 4 && trainPts2.size() == queryPts2.size()) {
+        homography2 = findHomography(Mat(queryPts2), Mat(trainPts2), RANSAC, RANSAC_THRESH, inlierMask2);
     }
 
     // get inlier keypoints of this model
     vector<KeyPoint> inliers1;
-    for(unsigned i = 0; i < inlierMask.size(); i++) {
-        if (inlierMask[i]) {
+    vector<KeyPoint> inliers2;
+    for(unsigned i = 0; i < inlierMask1.size(); i++) {
+        if (inlierMask1[i]) {
             inliers1.push_back(trainKPts1[i]);
+        }
+    }
+    for(unsigned i = 0; i < inlierMask2.size(); i++) {
+        if (inlierMask2[i]) {
+            inliers2.push_back(trainKPts2[i]);
         }
     }
 
     drawKeypoints(frame, inliers1, frame, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
+    drawKeypoints(frame, inliers2, frame, Scalar(255, 0, 0), DrawMatchesFlags::DRAW_OVER_OUTIMG);
     // printf("nInliers = %d\n", (int)inliers1.size());
 }
 
